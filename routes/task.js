@@ -28,7 +28,6 @@ var upload = multer({
     })
 });
 
-
 //수행자입장에서 검색
 router.get('/', function(req, res) {
     pool.getConnection(function(error, connection) {
@@ -45,8 +44,8 @@ router.get('/', function(req, res) {
                     connection.release();
                 } else {
                     if (rows == "D"){
-                        console.log("this client already asking");
-                        res.status(405).send({ message: 'this client already asking', result: [] }); 
+                        console.log("this helper already help other client");
+                        res.status(405).send({ message: 'this helper already help other client', result: [] }); 
                         connection.release();
                     } else {
                         let home_lat = req.body.home_lat;
@@ -70,8 +69,77 @@ router.get('/', function(req, res) {
                                     res.sendStatus(500).send({ message: 'Connection Error' + error, result: [] });
                                     connection.release();
                                 } else {
-                                    console.log('Success selecting the task list');
+                                    console.log("Success in selecting the task list");
                                     res.status(200).json({message : "Success in selecting the task list", result : rows});
+                                    connection.release();
+                                }
+                            });
+                        }
+                    }
+                }
+            });
+        }
+    });
+});
+
+//의뢰자 
+router.post('/', function(req, res) {
+    pool.getConnection(function(error, connection) {
+        if (error) {
+            console.log("getConnection Error" + error);
+            res.sendStatus(500);
+            connection.release();
+        } else {
+            //의뢰 가능한 사람인지 검증
+            let selectQuery = 'SELECT status FROM clients WHERE id = 1';
+            connection.query(selectQuery, function(error, rows) {
+                if(error) {
+                    console.log("Connection Error : " + error);
+                    res.sendStatus(500).send({ message: "Connection Error : " + error });
+                    connection.release();
+                } else {
+                    if (rows == "D"){
+                        console.log("this user has already ask to other helper");
+                        res.status(405).send({ message: 'this user has already ask to other helper' }); 
+                        connection.release();
+                    } else {
+                        let task_type = req.body.task_type;             let cost = req.body.cost;
+                        let details = req.body.details;                 let deadline = req.body.deadline;
+                        let workplace_lat = req.body.workplace_lat;     let workplace_long = req.body.workplace_long;
+                        let home_lat = req.body.home_lat;               let home_long = req.body.home_long;
+                        let workplace_name = req.body.workplace_name;   let home_name = req.body.home_name;
+                        let phone = req.body.phone;                     let star = req.body.star;
+
+                        //올바른 인풋이 아닐때
+                        if (!(task_type && cost && details && deadline && workplace_lat && workplace_long
+                              && home_lat && home_long && workplace_name && home_name && phone && star)) {
+                            res.status(400).send({ message: 'wrong inout' });
+                            connection.release();
+                        } else {
+                            //테이블에 정보 삽입
+                            let insertQuery = 'INSERT INTO current_tasks SET ?';
+                            let value = [task_type, cost, details, deadline, workplace_lat, workplace_long, home_lat, home_long, workplace_name, home_name, phone, star];
+                            connection.query(insertQuery, value, function(err, rows) {
+                                if(err) {
+                                    console.log("Connection Error : " + err);
+                                    res.sendStatus(500).send("Connection Error : " + err);
+                                    connection.release();
+                                } else {
+                                    res.status(200).json({ message : "Success in getting user information" });
+                                    connection.release();
+                                }  
+                            });
+
+                            let updateQuery = 'UPDATE clients SET status = ? WHERE user_idx = ?'
+                            var value = ["D", 1];
+                            connection.query(updateQuery, value, function(error, rows) {
+                                if(error) {
+                                    console.log("Connection Error : " + err);
+                                    res.sendStatus(500).send("Connection Error : " + err);
+                                    connection.release();
+                                }
+                                else {
+                                    res.status(200).json({ message : "Success in getting user information" });
                                     connection.release();
                                 }
                             });
