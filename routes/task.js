@@ -28,24 +28,25 @@ var upload = multer({
     })
 });
 
+
 //수행자입장에서 검색
 router.get('/', function(req, res) {
     pool.getConnection(function(error, connection) {
         if (error) {
             console.log("getConnection Error" + error);
-            res.sendStatus(500);
+            res.sendStatus(500).send({ message: "Connection Error : " + error, result: [] });
         } else {
             //id 수정해야 함
             let selectQuery = 'SELECT status FROM helpers WHERE user_idx = 1';
             connection.query(selectQuery, function(error, rows) {
                 if(error) {
                     console.log("Connection Error : " + error);
-                    res.sendStatus(500).send({ message: "Connection Error : " + error });
+                    res.sendStatus(500).send({ message: "Connection Error : " + error, result: [] });
                     connection.release();
                 } else {
                     if (rows == "D"){
                         console.log("this client already asking");
-                        res.status(400).send({ message: 'this client already asking' }); 
+                        res.status(405).send({ message: 'this client already asking', result: [] }); 
                         connection.release();
                     } else {
                         let home_lat = req.body.home_lat;
@@ -71,7 +72,6 @@ router.get('/', function(req, res) {
                                 } else {
                                     console.log('Success selecting the task list');
                                     res.status(200).json({message : "Success in selecting the task list", result : rows});
-                                    res.json(rows).send();
                                     connection.release();
                                 }
                             });
