@@ -48,10 +48,10 @@ router.get('/', function(req, res) {
                         res.status(400).send({ message: 'this client already asking' }); 
                         connection.release();
                     } else {
-                        let home_lat = req.query.home_lat;
-                        let home_long = req.query.home_long;
-                        let workplace_lat = req.query.workplace_lat;
-                        let workplace_long = req.query.workplace_long;
+                        let home_lat = req.body.home_lat;
+                        let home_long = req.body.home_long;
+                        let workplace_lat = req.body.workplace_lat;
+                        let workplace_long = req.body.workplace_long;
                         console.log("input : " , home_lat, home_long, workplace_lat, workplace_long);
                         if (!(home_lat && home_long && workplace_lat && workplace_long))
                             res.status(400).send({ message: 'wrong inout', result: [] });
