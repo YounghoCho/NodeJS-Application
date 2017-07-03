@@ -1,7 +1,11 @@
-var express = require('express');
-var app = express();
-var task= require('./routes/task');
-var navi= require('./routes/navi');
+const express = require('express');
+const app = express();
+const bodyParser = require('body-parser');
+const task= require('./routes/task');
+const navi= require('./routes/navi');
+
+app.use(bodyParser.urlencoded({extended: true}));
+app.use(bodyParser.text());
 
 app.use('/task', task);
 app.use('/navi', navi);

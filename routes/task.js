@@ -2,7 +2,6 @@ var express = require('express');
 var mysql = require('mysql');
 var aws = require('aws-sdk');
 var db_config = require('../config/AWS_RDS_Config.json');
-aws.config.loadFromPath('./config/AWS_config.json');//.한개지 ..두개찍으면 안됨.
 const multer= require('multer');
 const multerS3= require('multer-s3');
 var router = express.Router();
@@ -26,33 +25,34 @@ var upload = multer({
             cb(null, Date.now() + '.' + file.originalname.split('.').pop());
         }
     })
-});
-
-//수행자입장에서 검색
-router.get('/', function(req, res) {
+});//수행자입장에서 검색
+router.post('/helper', function(req, res) {
     pool.getConnection(function(error, connection) {
         if (error) {
             console.log("getConnection Error" + error);
-            res.sendStatus(500).send({ message: "Connection Error : " + error, result: [] });
+            res.status(500).send({ message: "Connection Error : " + error, result: [] });
         } else {
             //id 수정해야 함
             let selectQuery = 'SELECT status FROM helpers WHERE user_idx = 1';
             connection.query(selectQuery, function(error, rows) {
                 if(error) {
                     console.log("Connection Error : " + error);
-                    res.sendStatus(500).send({ message: "Connection Error : " + error, result: [] });
+                    res.status(500).send({ message: "Connection Error : " + error, result: [] });
                     connection.release();
                 } else {
+                    //이미 수행중인지 체크
                     if (rows == "D"){
                         console.log("this helper already help other client");
                         res.status(405).send({ message: 'this helper already help other client', result: [] }); 
                         connection.release();
                     } else {
+                        //수행중이지 않으면
                         let home_lat = req.body.home_lat;
                         let home_long = req.body.home_long;
                         let workplace_lat = req.body.workplace_lat;
                         let workplace_long = req.body.workplace_long;
                         console.log("input : " , home_lat, home_long, workplace_lat, workplace_long);
+                        //올바른 좌표 들어오는지 체크
                         if (!(home_lat && home_long && workplace_lat && workplace_long))
                             res.status(400).send({ message: 'wrong inout', result: [] });
                         else {
@@ -60,13 +60,13 @@ router.get('/', function(req, res) {
                             let long = (parseFloat(home_long) + parseFloat(workplace_long)) / parseFloat(2.0);
                             let r = (lat - home_lat)*(lat - home_lat) + (long - home_long)*(long - home_long);
                             console.log("center : " , lat, long);
-                            //매칭되지 않고 반경안에 있는 task
+                            //매칭되지 않고 반경안에 있는 task lis
                             let selectQuery = 'SELECT t.*, m.phone, (c.rating/c.rated_count) AS star FROM current_tasks t, clients c, members m WHERE matching_time = ? AND (t.home_lat - ?)*(t.home_lat - ?)+(t.home_long - ?)*(t.home_long - ?) <= ? AND t.clients_members_idx = c.user_idx AND c.user_idx = m.user_id';
                             var value=["0000-00-00 00:00:00",lat,lat,long,long,r];
                             connection.query(selectQuery, value, function(error, rows) {
                                 if (error) {
                                     console.log("Connection Error : " + error);
-                                    res.sendStatus(500).send({ message: 'Connection Error' + error, result: [] });
+                                    res.status(500).send({ message: 'Connection Error' + error, result: [] });
                                     connection.release();
                                 } else {
                                     console.log("Success in selecting the task list");
@@ -152,5 +152,5 @@ router.post('/', function(req, res) {
 });
 
      
-     
+
 module.exports = router;
