@@ -87,7 +87,7 @@ router.post('/', function(req, res) {
     pool.getConnection(function(error, connection) {
         if (error) {
             console.log("getConnection Error" + error);
-            res.sendStatus(500);
+            res.sendStatus(500).send({message : "getConnection Error" + error});
             connection.release();
         } else {
             //의뢰 가능한 사람인지 검증
@@ -98,9 +98,9 @@ router.post('/', function(req, res) {
                     res.sendStatus(500).send({ message: "Connection Error : " + error });
                     connection.release();
                 } else {
-                    if (rows == "D"){
+                    if (rows == "A"){
                         console.log("this user has already ask to other helper");
-                        res.status(405).send({ message: 'this user has already ask to other helper' }); 
+                        res.status(405).send({ message: 'this user has already ask to other helper' });
                         connection.release();
                     } else {
                         let task_type = req.body.task_type;             let cost = req.body.cost;
@@ -150,5 +150,6 @@ router.post('/', function(req, res) {
         }
     });
 });
+
 
 module.exports = router;
