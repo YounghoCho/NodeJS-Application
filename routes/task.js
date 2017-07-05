@@ -7,6 +7,7 @@ const multer = require('multer');
 const multerS3 = require('multer-s3');
 var router = express.Router();
 var s3 = new aws.S3();//S3의 객체를 생성한다
+var date_utils = require('date-utils');
 
 router.use(bodyParser.urlencoded({extended: true}));
 router.use(bodyParser.text());
@@ -38,20 +39,20 @@ router.get('/test', function (req, res) {
         } else {
             let Query = 'insert into current_tasks set ?';
             let value = {
-            "task_idx": 12,
+            "task_idx": 14,
             "clients_members_idx": 1,
-            "helpers_members_idx": 1,
+            "helpers_members_idx": 26,
             "task_type": "E",
-            "cost": 12000,
-            "details": "머리좀 감겨주세요ㅛ 간지러웡 ",
+            "cost": 30000,
+            "details": "변기좀 뚫어주세요 ㅜㅜㅜㅜㅜㅜㅜ",
             "home_lat": 37.466882, 
             "home_long": 126.888364,
             "workplace_lat":37.466930,  
             "workplace_long":126.889474,
-            "matching_time": "0000-00-00 00:00:00",
+            "matching_time": "2017-07-01 09:04:12",
             "workplace_name": "어떤곳",
             "home_name": "어떤곳2",
-            "deadline": "60분"
+            "deadline": "45분"
         }
             connection.query(Query, value, function (error, rows) {
                 if (error) {
@@ -129,7 +130,7 @@ router.get('/helper', function (req, res) {
                             //매칭되지 않고 반경안에 있는 task list
                             //let selectQuery = 'SELECT t.*, m.user_name, m.phone, (c.rating/c.rated_count) AS star FROM current_tasks t, clients c, members m WHERE matching_time = ? AND (t.home_lat - ?)*(t.home_lat - ?)+(t.home_long - ?)*(t.home_long - ?) <= ? AND t.clients_members_idx = c.user_idx AND c.user_idx = m.user_id';
                             //let selectQuery = 'SELECT * FROM current_tasks';
-                            let selectQuery = 'SELECT t.*, m.user_name, m.phone, (c.rating/c.rated_count) AS star FROM current_tasks t, clients c, members m WHERE matching_time = ? AND (6371*acos(cos(radians(?))*cos(radians(workplace_lat))*cos(radians(workplace_long)-radians(?))+sin(radians(?))*sin(radians(workplace_lat))))<=?';
+                            let selectQuery = 'SELECT t.*, m.user_name, m.phone, (c.rating/c.rated_count) AS star, m.image_path FROM current_tasks t, clients c, members m WHERE matching_time = ? AND (6371*acos(cos(radians(?))*cos(radians(workplace_lat))*cos(radians(workplace_long)-radians(?))+sin(radians(?))*sin(radians(workplace_lat))))<=?';
                             var value = ["0000-00-00 00:00:00", lat, long, lat, r];
                             connection.query(selectQuery, value, function (error2, rows2) {
                                 if (error) {
@@ -235,7 +236,7 @@ router.post('/client', function (req, res) {
                                     res.status(500).send("Connection Error2 : " + err);
                                     connection.release();
                                 } else {
-                                    //의뢰자 사태 갱신
+                                    //의뢰자 상태 갱신
                                     let updateQuery = 'UPDATE clients SET status = ? WHERE user_idx = ?'
                                     var value2 = ["D", 1];
                                     connection.query(updateQuery, value2, function (error, rows) {
@@ -368,22 +369,25 @@ router.post('/star', function (req, res) {
                         res.status(500).send({ message: "Connection Error1 : " + err });
                         connection.release();
                     } else {
-                        user_idx = rows.user_idx;
-                        console.log(user_idx);
-
-                        if (role == "client") {
+                        console.log("id : ", rows[0].user_idx);
+                        if (!(user_idx = rows[0].user_idx)) {
+                            res.status(400).send({ message: "wrong input - id" });
+                            connection.release();
+                        }
+                        else {
+                            if (role == "client") {
                             //insertQuery = "INSERT INTO past_tasks (clients_members_idx, helpers_members_idx, task_type, cost, details, home_lat, home_long, workplace_lat, workplace_long, matching_time, comment_c, rating_c) VALUE SELECT (clients_members_idx, helpers_members_idx, task_type, cost, details, home_lat, home_long, workplace_lat, workplace_long, matching_time, ?, ?)";
                             selectQuery = "SELECT rating_h FROM past_tasks WHERE clients_members_idx = ? AND finish_time = ?";
                             insertQuery = "INSERT INTO past_tasks (clients_members_idx, helpers_members_idx, task_type, cost, details, home_lat, home_long, workplace_lat, workplace_long, matching_time) SELECT clients_members_idx, helpers_members_idx, task_type, cost, details, home_lat, home_long, workplace_lat, workplace_long, matching_time FROM current_tasks WHERE clients_members_idx = ?";
                             deleteQuery = "DELETE FROM current_tasks WHERE clients_members_idx = ?";
-                            updateQuery = "UPDATE past_tasks SET comment_c = ?, rating_c = ?, matching_time = ? WHERE clients_members_idx = ?";
+                            updateQuery = "UPDATE past_tasks SET comment_c = ?, rating_c = ?, finish_time = ? WHERE clients_members_idx = ?";
                         }
                         else if (role == "helper") {
                             //insertQuery = "INSERT INTO past_tasks (clients_members_idx, helpers_members_idx, task_type, cost, details, home_lat, home_long, workplace_lat, workplace_long, matching_time, comment_h, rating_h) VALUE SELECT (clients_members_idx, helpers_members_idx, task_type, cost, details, home_lat, home_long, workplace_lat, workplace_long, matching_time, ?, ?)";
-                            selectQuery = "SELECT rating_c FROM past_tasks WHERE clients_members_idx = ? AND finish_time = ?";
+                            selectQuery = "SELECT rating_c FROM past_tasks WHERE helpers_members_idx = ? AND finish_time = ?";
                             insertQuery = "INSERT INTO past_tasks (clients_members_idx, helpers_members_idx, task_type, cost, details, home_lat, home_long, workplace_lat, workplace_long, matching_time) SELECT clients_members_idx, helpers_members_idx, task_type, cost, details, home_lat, home_long, workplace_lat, workplace_long, matching_time FROM current_tasks WHERE helpers_members_idx = ?";
                             deleteQuery = "DELETE FROM current_tasks WHERE helpers_members_idx = ?";
-                            updateQuery = "UPDATE past_tasks SET comment_h = ?, rating_h = ?, matching_time = ? WHERE helpers_members_idx = ?";
+                            updateQuery = "UPDATE past_tasks SET comment_h = ?, rating_h = ?, finish_time = ? WHERE helpers_members_idx = ?";
                         }
                         else {
                             console.log("wrong input - role");
@@ -399,10 +403,11 @@ router.post('/star', function (req, res) {
                                 res.status(500).send({ message: "Connection Error2 : " + err2 });
                                 connection.release();
                             } else {
-                                //res.status(200).send({ message: rows2 }); //디버깅
-                                //등록을 안했으면
-                                if (rows2 == '') {
+                                console.log(JSON.stringify(rows2));
+                                if (JSON.stringify(rows2) == "[]") {
+                                    //아직 등록 안했으면
                                     //current_tasks의 정보 past_tasks로 옮김 / 삭제는 안함
+
                                     connection.query(insertQuery, user_idx, function (err3, rows3) {
                                         if (err3) {
                                             console.log("Connection Error3 : " + err3);
@@ -410,43 +415,56 @@ router.post('/star', function (req, res) {
                                             connection.release();
                                         } else {
                                             console.log("정보 옮김!");
-                                            check = true;
+                                            
+                                            console.log("별점을 등록 하자!1");
+                                            
+                                            let data2 = [user_comment, user_star, "0000-00-00 00:00:00", user_idx];
+                                            connection.query(updateQuery, data2, function (err3, rows3) {
+                                                if (err3) {
+                                                    console.log("Connection Error4 : " + err3);
+                                                    res.status(500).send({ message: "Connection Error4 : " + err3 });
+                                                    connection.release();
+                                                } else {
+                                                    console.log("1차 별점 등록!");
+                                                    res.status(200).send({ message: "Success" });
+                                                }
+                                            }); 
                                         }
                                     });
-                                    
-                                    let data2 = [user_comment, user_star, "0000-00-00 00:00:00"];
                                 }
                                 //등록했으면 
                                 else {
                                     //이미 pask_taskscurrent_task삭제
                                     connection.query(deleteQuery, user_idx, function (err3, rows3) {
                                         if (err3) {
-                                            console.log("Connection Error4 : " + err3);
-                                            res.status(500).send({ message: "Connection Error4 : " + err3 });
+                                            console.log("Connection Error5 : " + err3);
+                                            res.status(500).send({ message: "Connection Error5 : " + err3 });
                                             connection.release();
                                         } else {
                                             console.log("정보 삭제!");
-                                            check = true;
-                                        }
-                                    });
-
-                                    let data2 = [user_comment, user_star, now.Date];                                    
-                                }
-                                //pask_tasks에 별점 등록 - 공동이라서 밖으로 빼둠
-                                if (check) {
-                                    connection.query(updateQuery, data2, function (err3, rows3) {
-                                        if (err3) {
-                                            console.log("Connection Error : " + err3);
-                                            res.status(500).send({ message: "Connection Error : " + err3 });
-                                            connection.release();
-                                        } else {
-                                            console.log("1차 별점 등록!");
-                                            res.status(200).send({ message: "Success" });
+                                            
+                                            console.log("별점을 등록 하자!2");
+                                            var newDate = new Date();
+                                            var time = newDate.toFormat('YYYY-MM-DD HH24:MI:SS');
+                                            console.log(time);
+                                            
+                                            let data2 = [user_comment, user_star, time, user_idx];                                    
+                                            connection.query(updateQuery, data2, function (err3, rows3) {
+                                                if (err3) {
+                                                    console.log("Connection Error6 : " + err3);
+                                                    res.status(500).send({ message: "Connection Error6 : " + err3 });
+                                                    connection.release();
+                                                } else {
+                                                    console.log("2차 별점 등록!");
+                                                    res.status(200).send({ message: "Success" });
+                                                }
+                                            }); 
                                         }
                                     });
                                 } 
                             }
                         });
+                        }
                     }
                 });
             }
