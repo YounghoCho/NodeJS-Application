@@ -130,15 +130,12 @@ router.get('/join/check', function(req,res){
 });
 //로그인
 router.post('/login', function(req, res) {
-  console.log('dahoon');
     pool.getConnection(function(error, connection) {
         if (error) {
             console.log("poll getConnection Error" + error);
             res.sendStatus(500);
         } else {
-          console.log('db in')
             if(req.body.user_pw==undefined){
-              console.log('good input')
               //android login
               var value2=req.body.user_id;
               let query="select user_idx from members where user_id = ?";
@@ -149,7 +146,6 @@ router.post('/login', function(req, res) {
                        connection.release();
                    } else {
                      //등록된 id가 없으면 삽입
-                     console.log('inserting');
                       if(rows2[0]==undefined){
                         let value3=[req.body.user_id, req.body.user_name, req.body.phone];
                         let query2="insert into members (user_idx, user_id, user_name, phone) values ('', ?,?,?)";
@@ -159,9 +155,43 @@ router.post('/login', function(req, res) {
                               res.status(500).send({message:"internal server error :"+error});
                               connection.release();
                           } else {
-                            console.log('back');
-                            res.sendStatus(200);
-                            connection.release();
+                            //members, helpers, bookmarks에도 정보 등록.
+                              //일단 방금 삽입된 user_idx를 호출한다.
+                              let query_idx="select user_idx from members where user_id=?";
+                              connection.query(query_idx, req.body.user_id, function(error, rows, fields) {
+                                if (error) {
+                                    res.status(500).send({message:"internal server error :"+error});
+                                    connection.release();
+                                } else {
+                                   //삽입된 계정의 user_idx를 가져오고 (중요)
+                                    let u_idx = rows[0].user_idx;
+                                    //clients helpers에도 데이터를 넣어줘야한다.
+                                    let query_clients="insert into clients (user_idx) values (?)";
+                                    connection.query(query_clients, u_idx, function(error, rows) {
+                                      if (error) {
+                                          res.status(500).send({message:"internal server error :"+error});
+                                          connection.release();
+                                      }
+                                    });
+                                    let query_helpers="insert into helpers (user_idx) values (?)";
+                                    connection.query(query_helpers, u_idx, function(error, rows) {
+                                      if (error) {
+                                          res.status(500).send({message:"internal server error :"+error});
+                                          connection.release();
+                                      }
+                                    });
+                                    let query_bookmarks="insert into bookmarks (user_idx) values (?)";
+                                    connection.query(query_bookmarks, u_idx, function(error, rows) {
+                                      if (error) {
+                                          res.status(500).send({message:"internal server error :"+error});
+                                          connection.release();
+                                      }
+                                    });
+                                   //성공
+                                   res.status(200).send({message:"success in login"});
+                                   connection.release();
+                                }
+                              });
                           }
                         });
                       }else{
