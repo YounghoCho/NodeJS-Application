@@ -130,30 +130,70 @@ router.get('/join/check', function(req,res){
 });
 //로그인
 router.post('/login', function(req, res) {
+  console.log('dahoon');
     pool.getConnection(function(error, connection) {
         if (error) {
             console.log("poll getConnection Error" + error);
             res.sendStatus(500);
         } else {
-          var value=[
-            req.body.user_id,
-            req.body.user_pw
-          ];
-             let query="select user_idx from members where (user_id = ? and user_pw = ?)";
-              connection.query(query, value, function(error, rows) {
-                  if (error) {
-                      res.status(500).send({message:"internal server error :"+error});
-                      connection.release();
-                  } else {
-                      if(rows){
-                        res.status(200).json({message : "Success in login", rows});
-                        connection.release();
+          console.log('db in')
+            if(req.body.user_pw==undefined){
+              console.log('good input')
+              //android login
+              var value2=req.body.user_id;
+              let query="select user_idx from members where user_id = ?";
+               connection.query(query, value2, function(error, rows2) {
+                   if (error) {
+                      console.log(error);
+                       res.status(500).send({message:"internal server error :"+error});
+                       connection.release();
+                   } else {
+                     //등록된 id가 없으면 삽입
+                     console.log('inserting');
+                      if(rows2[0]==undefined){
+                        let value3=[req.body.user_id, req.body.user_name, req.body.phone];
+                        let query2="insert into members (user_idx, user_id, user_name, phone) values ('', ?,?,?)";
+                        connection.query(query2, value3, function(error, rows3) {
+                          if (error) {
+                              console.log(error);
+                              res.status(500).send({message:"internal server error :"+error});
+                              connection.release();
+                          } else {
+                            console.log('back');
+                            res.sendStatus(200);
+                            connection.release();
+                          }
+                        });
                       }else{
-                        res.status(400).send({message : "wrong input"});
-                        connection.release();
+                      //등록된 아이디가 이미 있으면 있다고해
+                      res.sendStatus(200);
+                      connection.release();
                       }
-                  }
-              });
+                   }
+               });
+            }else{
+              //ios login
+               var value=[
+                 req.body.user_id,
+                 req.body.user_pw
+               ];
+               let query="select user_idx from members where user_id = ? and user_pw = ?";
+                connection.query(query, value, function(error, rows) {
+                    if (error) {
+                        res.status(500).send({message:"internal server error :"+error});
+                        connection.release();
+                    } else {
+                        if(rows){
+                          res.status(200).json({message : "Success in login"});
+                          connection.release();
+                        }else{
+                          res.status(400).send({message : "wrong input"});
+                          connection.release();
+                        }
+                    }
+                });
+            }
+
         }
     });
 });

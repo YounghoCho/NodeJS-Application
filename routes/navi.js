@@ -2,7 +2,7 @@ var express = require('express');
 var mysql = require('mysql');
 //aws 선언 순서중요함
 var aws = require('aws-sdk');
-aws.config.loadFromPath ('./config/AWS_config.json');
+//aws.config.loadFromPath ('./config/AWS_config.json');
 var s3= new aws.S3();
 
 var db_config = require('../config/AWS_RDS_Config.json');
@@ -10,6 +10,9 @@ const multer= require('multer');
 const multerS3= require('multer-s3');
 var router = express.Router();
 
+const bodyParser = require('body-parser');
+router.use(bodyParser.urlencoded({ extended: false }));
+router.use(bodyParser.json());
 //이미지테스트
 // const fs = require('fs');
 // const ejs = require('ejs');
@@ -142,14 +145,14 @@ router.get('/mypage/set', function(req, res) {
     });
 });
 //네비게이션>마이페이지>계정설정-저장 (이미지 업로드)
-router.put('/mypage/set', upload.single('pic'), function(req, res) {
+router.post('/mypage/set', upload.single('pic'), function(req, res) {
     pool.getConnection(function(error, connection) {
         if (error) {
             console.log("poll getConnection Error" + error);
             res.sendStatus(500);
         } else {
               var value;
-              connection.query("update members set user_name=?, phone=?, about=?, image_path=? where user_id= ?", value=[req.query.user_name, req.query.phone, req.query.about, req.file.location, req.query.user_id], function(error, rows) {
+              connection.query("update members set user_name=?, phone=?, about=?, image_path=? where user_id= ?", value=[req.body.user_name, req.body.phone, req.body.about, req.file.location, req.body.user_id], function(error, rows) {
                   if (error) {
                       res.sendStatus(500).send({message:"internal server error :"+error});
                       connection.release();
@@ -280,9 +283,9 @@ router.get('/mypage/comments', function(req, res) {
               var query="";
               //id값으로 들어온 녀석의 member의 user_idx를 찾은다음에, 쿼리문에서 user_idx를 삽입해서 찾는다.
               if(role=='Client')
-                 query="select user_name, finish_time, rating_h, comment_h from past_tasks a,members b where a.helpers_members_idx=b.user_idx and user_idx=?";
+                 query="select user_name, finish_time, rating_h, comment_h from past_tasks a,members b where a.clients_members_idx=b.user_idx and user_idx=?";
               else if(role=='Helper')
-                query="select user_name, finish_time, rating_c, comment_c from past_tasks a,members b where a.clients_members_idx=b.user_idx and user_idx=?";
+                query="select user_name, finish_time, rating_c, comment_c from past_tasks a,members b where a.helpers_members_idx=b.user_idx and user_idx=?";
 
                 connection.query(query, u_id, function(error, rows) {
                     if (error) {
