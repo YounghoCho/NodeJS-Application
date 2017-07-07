@@ -85,6 +85,14 @@ router.post('/join', function(req, res) {
                                     connection.release();
                                 }
                               });
+							  //돈도넣어주기
+							  let query_money="update members set money=100000 where user_idx = ?";
+							  connection.query(query_money, u_idx, function(error, rows) {
+                                if (error) {
+                                    res.status(500).send({message:"internal server error :"+error});
+                                    connection.release();
+                                }
+                              });
                              //성공
                              res.status(200).send({message:"success in joining"});
                              connection.release();
@@ -187,6 +195,14 @@ router.post('/login', function(req, res) {
                                           connection.release();
                                       }
                                     });
+									//돈도넣어주기
+									 let query_money="update members set money=100000 where user_idx = ?";
+									 connection.query(query_money, u_idx, function(error, rows) {
+										if (error) {
+											res.status(500).send({message:"internal server error :"+error});
+											connection.release();
+										}
+									 });
                                    //성공
                                    res.status(200).send({message:"success in login"});
                                    connection.release();

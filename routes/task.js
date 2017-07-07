@@ -79,7 +79,10 @@ router.get('/helper', function (req, res) {
 
                             console.log("center : ", lat, long);
                             console.log("radius : ", r);
-                            let selectQuery = 'SELECT t.*, m.phone, (c.rating/c.rated_count) as star, m.user_name, m.image_path FROM current_tasks t, clients c, members m WHERE t.clients_members_idx=c.user_idx AND c.user_idx=m.user_idx AND matching_time = ? AND (6371*acos(cos(radians(?))*cos(radians(home_lat))*cos(radians(home_long)-radians(?))+sin(radians(?))*sin(radians(home_lat))))<=? group by m.user_idx';
+                            //let selectQuery = 'SELECT t.*, m.user_name, m.phone, (c.rating/c.rated_count) AS star, m.image_path FROM current_tasks t, clients c, members m WHERE matching_time = ? AND (6371*acos(cos(radians(?))*cos(radians(workplace_lat))*cos(radians(workplace_long)-radians(?))+sin(radians(?))*sin(radians(workplace_lat))))<=? AND t.clinets_members_idx = m.user_idx AND m.user_idx = c.user_idx GROUP BY m.user_idx;';
+                            //요주의 쿼리***********
+                            let selectQuery = 'SELECT t.*, m.phone, (c.rating/c.rated_count) as star, m.image_path FROM current_tasks t, clients c, members m WHERE t.clients_members_idx=c.user_idx AND c.user_idx=m.user_idx AND matching_time = ? AND (6371*acos(cos(radians(?))*cos(radians(home_lat))*cos(radians(home_long)-radians(?))+sin(radians(?))*sin(radians(home_lat))))<=? group by m.user_idx';
+                            //let selectQuery = 'SELECT * FROM current_tasks WHERE matching_time = ? AND (6371*acos(cos(radians(?))*cos(radians(workplace_lat))*cos(radians(workplace_long)-radians(?))+sin(radians(?))*sin(radians(workplace_lat))))<=?';
                             var value = ["0000-00-00 00:00:00", lat, long, lat, r];
                             connection.query(selectQuery, value, function (error2, rows2) {
                                 if (error) {
@@ -88,7 +91,6 @@ router.get('/helper', function (req, res) {
                                     connection.release();
                                 } else {
                                     console.log("Success in selecting the task list");
-									console.log(rows2[0]);
                                     res.status(200).send({ message: "Success in selecting the task list", result: rows2 });
                                     connection.release();
                                 }
@@ -106,23 +108,26 @@ router.get('/helper', function (req, res) {
 //의뢰인 상태 돈 충분한지 체크
 //current에 등록
 //result에 task_idx넘겨줘야함
-router.post('/client', function (req, res) {
+router.put('/client', function (req, res) {
     pool.getConnection(function (error, connection) {
         if (error) {
             console.log("getConnection Error" + error);
             res.status(500).send({ message: "getConnection Error" + error });
             connection.release();
         } else {
-            let task_type = req.body.task_type;             let cost = req.body.cost;
-            let details = req.body.details;                 let deadline = req.body.deadline;
-            let workplace_lat = req.body.workplace_lat;     let workplace_long = req.body.workplace_long;
-            let home_lat = req.body.home_lat;               let home_long = req.body.home_long;
-            let workplace_name = req.body.workplace_name;   let home_name = req.body.home_name;
-            let user_id = req.body.user_id;                 //let user_idx;
+          console.log("workplace_name ok?: "+req.query.workplace_name);
+            let task_type = req.query.task_type;             let cost = req.query.cost;
+            let details = req.query.details;                 let deadline = req.query.deadline;
+            let workplace_lat = req.query.workplace_lat;     let workplace_long = req.query.workplace_long;
+            let home_lat = req.query.home_lat;               let home_long = req.query.home_long;
+            let workplace_name = req.query.workplace_name;   let home_name = req.query.home_name;
+            let user_id = req.query.user_id;                 //let user_idx;
+			
+			console.log(task_type+" "+cost+" "+details+" "+deadline+" "+workplace_lat+" "+workplace_long+" "+home_lat+" "+home_long+" "+workplace_name+" "+home_name+" "+user_id);
 
             //올바른 인풋이 아닐때
             if (!(task_type && cost && details && deadline && workplace_lat && workplace_long
-                && home_lat && home_long && workplace_name && home_name)) {
+                && home_lat && home_long && workplace_name && home_name && user_id)) {
                 res.status(400).send({ message: 'wrong input' });
                 connection.release();
             } else {
@@ -169,6 +174,45 @@ router.post('/client', function (req, res) {
                                             connection.release();
                                           }
                                       });
+									  // 30분 후 정보삭제
+											setTimeout(function(){
+                                              console.log("work0");
+                                                //----1----//
+                                               let query1="SELECT matching_time from current_tasks where clients_members_idx= ?";
+                                               connection.query(query1, user_idx, function(err1,rows1){
+                                                 if(err1){
+                                                   console.log("err1: "+err1);
+                                                   connection.release();
+                                                 }
+                                                 else{
+                                                   if(rows1[0].matching_time=='0000-00-00 00:00:00'){
+                                                     console.log('work1');
+                                                     //----2----//
+                                                     let query2="DELETE from current_tasks where clients_members_idx= ?";
+                                                     connection.query(query2, user_idx, function(err2,rows2){
+                                                       console.log('work2');
+                                                       if(err2){
+                                                         console.log("err2: "+err2);
+                                                         connection.release();
+                                                       }else{
+                                                         //----3----//
+                                                         let query3="UPDATE clients set status = 'A' where user_idx= ?";
+                                                         connection.query(query3, user_idx, function(err3,rows3){
+                                                            console.log('work3');
+                                                           if(err3){
+                                                             console.log("err3: "+err3);
+                                                             connection.release();
+                                                           }
+                                                         });
+                                                       }
+                                                     });
+
+                                                   }
+                                                 }
+
+                                               });
+                                             },1800000);
+
                                 }
                             });
                         }
@@ -180,7 +224,7 @@ router.post('/client', function (req, res) {
 });
 
 //유저 아이디로 유저 idx 검색해서 저장 / 유저 상태도 변경
-//요청이 오면 current에서 별점으로 검색 : post past + finish time = 0000-00-00 00:00:00 star이랑 id 등록 
+//요청이 오면 current에서 별점으로 검색 : post past + finish time = 0000-00-00 00:00:00 star이랑 id 등록
 //두번 쨰 요청이 오면 put past matching time star이랑 id 등록 / delete current - 검사
 //ㅇㅖ외처리 해야함!
 //finishtime default 값
@@ -195,7 +239,7 @@ router.get('/star', function (req, res) {
             var user_comment = req.query.user_comment; var role = req.query.role;
             console.log(user_id, user_star, user_comment, role);
 
-            let user_idx; let user_idx2; let cost; 
+            let user_idx; let user_idx2; let cost;
             let insertQuery; let selectQuery; let deleteQuery; let updateQuery; let selectQuery2;
 
             //제대로 값이 들어왔는지 확인
@@ -309,13 +353,13 @@ router.get('/star', function (req, res) {
                                                                                         connection.release();
                                                                                     }
                                                                                 });
-                                                                                
+
                                                                             }
                                                                         });
                                                                     }
                                                                 });
                                                             }
-                                                            //등록했으면 
+                                                            //등록했으면
                                                             else {
                                                                 //pask_taskscurrent_task삭제
                                                                 connection.query(deleteQuery, user_idx, function (err3, rows3) {
@@ -520,7 +564,7 @@ router.put('/matching', function (req, res) {
     });
 });
 
-//매칭중 
+//매칭중
 //의뢰자가 자기 아이디로 임무 매칭시간 받아서 체크
 router.get('/matching/check', function (req, res) {
     pool.getConnection(function (error, connection) {
@@ -604,13 +648,12 @@ router.delete('/matching/cancel', function (req, res) {
                                 }
                             });
                         }
-                    }   
+                    }
                 });
             }
         }
     });
 });
-
 router.get('/comments', function (req, res) {
     pool.getConnection(function (error, connection) {
         if (error) {
@@ -657,5 +700,4 @@ router.get('/comments', function (req, res) {
         }
     });
 });
-
 module.exports = router;
