@@ -11,8 +11,12 @@ const multerS3= require('multer-s3');
 var router = express.Router();
 
 const bodyParser = require('body-parser');
-router.use(bodyParser.urlencoded({ extended: false }));
+
+
+router.use(bodyParser.urlencoded({ extended: true }));
 router.use(bodyParser.json());
+router.use(bodyParser.text());
+
 //이미지테스트
 // const fs = require('fs');
 // const ejs = require('ejs');
@@ -63,9 +67,9 @@ router.get('/', function(req, res) {
 
              let query="";
              if(role=='Client')
-                query="select user_name, rating, rated_count, image_path from members a, clients b where a.user_idx=b.user_idx and a.user_id= ? ";
+                query="select user_name, (b.rating/b.rated_count)as rating, rated_count, image_path from members a, clients b where a.user_idx=b.user_idx and a.user_id= ? ";
              else if(role=='Helper')
-                query="select user_name, rating, rated_count, image_path from members a, helpers b where a.user_idx=b.user_idx and a.user_id= ? ";
+                query="select user_name, (b.rating/b.rated_count)as rating, rated_count, image_path from members a, helpers b where a.user_idx=b.user_idx and a.user_id= ? ";
 
               connection.query(query, user_id, function(error, rows) {
                   if (error) {
@@ -145,14 +149,16 @@ router.get('/mypage/set', function(req, res) {
     });
 });
 //네비게이션>마이페이지>계정설정-저장 (이미지 업로드)
-router.post('/mypage/set', upload.single('pic'), function(req, res) {
+router.post('/mypage/set', /*upload.single('pic'),*/ function(req, res) {
     pool.getConnection(function(error, connection) {
         if (error) {
             console.log("poll getConnection Error" + error);
             res.sendStatus(500);
         } else {
               var value;
-              connection.query("update members set user_name=?, phone=?, about=?, image_path=? where user_id= ?", value=[req.body.user_name, req.body.phone, req.body.about, req.file.location, req.body.user_id], function(error, rows) {
+			  console.log(req.body.user_name+"========");
+
+             connection.query("update members set user_name=?, phone=?, about=?, image_path=? where user_id= ?", value=[req.body.user_name, req.body.phone, req.body.about, 'test',/*req.file.location,*/ req.body.user_id], function(error, rows) {
                   if (error) {
                       res.sendStatus(500).send({message:"internal server error :"+error});
                       connection.release();

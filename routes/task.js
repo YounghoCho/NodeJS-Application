@@ -9,9 +9,15 @@ var router = express.Router();
 var s3 = new aws.S3();//S3의 객체를 생성한다
 var date_utils = require('date-utils');
 //var schedule = require('node-schedule');
+var gcm=require('node-gcm');
 
 router.use(bodyParser.urlencoded({ extended: true }));
 router.use(bodyParser.text());
+
+//gcm
+var server_api_key='AAAABUVEzU4:APA91bESHNJ_qKxVOeIcaT5k6H9puphSEIYgemOBE6jo20LOmjbSYwdowP0qJduHaReO0k4b1wYeHf4R_n3eNKXgdWbZQhRrdccMXT2jqN05K1TCf5QoChSpwF0RO9jnI7yV1YJNFFb-';
+var sender=new gcm.Sender(server_api_key);
+var registrationIds=[];
 
 var pool = mysql.createPool({
     host: db_config.host,
@@ -81,7 +87,7 @@ router.get('/helper', function (req, res) {
                             console.log("radius : ", r);
                             //let selectQuery = 'SELECT t.*, m.user_name, m.phone, (c.rating/c.rated_count) AS star, m.image_path FROM current_tasks t, clients c, members m WHERE matching_time = ? AND (6371*acos(cos(radians(?))*cos(radians(workplace_lat))*cos(radians(workplace_long)-radians(?))+sin(radians(?))*sin(radians(workplace_lat))))<=? AND t.clinets_members_idx = m.user_idx AND m.user_idx = c.user_idx GROUP BY m.user_idx;';
                             //요주의 쿼리***********
-                            let selectQuery = 'SELECT t.*, m.phone, (c.rating/c.rated_count) as star, m.image_path FROM current_tasks t, clients c, members m WHERE t.clients_members_idx=c.user_idx AND c.user_idx=m.user_idx AND matching_time = ? AND (6371*acos(cos(radians(?))*cos(radians(home_lat))*cos(radians(home_long)-radians(?))+sin(radians(?))*sin(radians(home_lat))))<=? group by m.user_idx';
+                            let selectQuery = 'SELECT t.*, m.phone, (c.rating/c.rated_count) as star, m.image_path, m.user_name FROM current_tasks t, clients c, members m WHERE t.clients_members_idx=c.user_idx AND c.user_idx=m.user_idx AND matching_time = ? AND (6371*acos(cos(radians(?))*cos(radians(home_lat))*cos(radians(home_long)-radians(?))+sin(radians(?))*sin(radians(home_lat))))<=? group by m.user_idx';
                             //let selectQuery = 'SELECT * FROM current_tasks WHERE matching_time = ? AND (6371*acos(cos(radians(?))*cos(radians(workplace_lat))*cos(radians(workplace_long)-radians(?))+sin(radians(?))*sin(radians(workplace_lat))))<=?';
                             var value = ["0000-00-00 00:00:00", lat, long, lat, r];
                             connection.query(selectQuery, value, function (error2, rows2) {
@@ -121,13 +127,14 @@ router.put('/client', function (req, res) {
             let workplace_lat = req.query.workplace_lat;     let workplace_long = req.query.workplace_long;
             let home_lat = req.query.home_lat;               let home_long = req.query.home_long;
             let workplace_name = req.query.workplace_name;   let home_name = req.query.home_name;
-            let user_id = req.query.user_id;                 //let user_idx;
+            var user_id = req.query.user_id;                 //let user_idx;
 			
 			console.log(task_type+" "+cost+" "+details+" "+deadline+" "+workplace_lat+" "+workplace_long+" "+home_lat+" "+home_long+" "+workplace_name+" "+home_name+" "+user_id);
 
             //올바른 인풋이 아닐때
             if (!(task_type && cost && details && deadline && workplace_lat && workplace_long
                 && home_lat && home_long && workplace_name && home_name && user_id)) {
+				console.log('wrong input');
                 res.status(400).send({ message: 'wrong input' });
                 connection.release();
             } else {
@@ -139,6 +146,10 @@ router.put('/client', function (req, res) {
                         res.status(500).send({ message: "Connection Error1 : " + err });
                         connection.release();
                     } else {
+						console.log("why error?");
+						console.log("rows: "+rows);
+						console.log("rows[0]: "+rows[0]);
+
                         if (rows[0].status == "D") {
                             //이미 의뢰중인 사람이면
                             console.log("this user is already asking");
@@ -563,6 +574,130 @@ router.put('/matching', function (req, res) {
         }
     });
 });
+
+
+
+
+//매칭시 팝업
+router.put('/matching2', function (req, res) {
+    pool.getConnection(function (error, connection) {
+        if (error) {
+            console.log("getConnection Error" + error);
+            res.status(500).send("internal server error");
+            connection.release();
+        } else {
+            let task_idx = req.query.task_idx;  let user_id = req.query.user_id;
+
+            if (!(task_idx && user_id)) {
+                res.status(400).send("internal server error");
+                connection.release();
+            } else {
+                //수행 가능한 사람인지
+                let selectQuery = 'SELECT h.status, m.user_idx FROM helpers h, members m WHERE m.user_idx = h.user_idx AND m.user_id = ?';
+                connection.query(selectQuery, user_id, function (err, rows) {
+                    if (err) {
+                        console.log("Connection Error1 : " + err);
+                        res.status(500).send("internal server error");
+                        connection.release();
+                    } else {
+                        if (rows[0].status == "D") {
+                            //이미 수행중인 사람이면
+                            console.log("status == D");
+                            res.status(405).send("internal server error");
+                            connection.release();
+                        } else if (rows[0].user_idx){
+                            //수행가능한 사람이면 matching_time 체크 하고 테이블에 정보 삽입
+                            let user_idx = rows[0].user_idx;
+                            console.log("user_idx : ", user_idx);
+
+                            let updateQuery = 'UPDATE current_tasks SET helpers_members_idx = ?, matching_time = ? WHERE task_idx = ? AND matching_time = ?';
+                            var newDate = new Date();
+                            var time = newDate.toFormat('YYYY-MM-DD HH24:MI:SS');
+                            console.log("time : ", time);
+                            let value = [user_idx, time, task_idx, "0000-00-00 00:00:00"];
+                            connection.query(updateQuery, value, function (err2, rows2) {
+                                if (err2) {
+                                    console.log("Connection Error2 : " + err2);
+                                    res.status(500).send("internal server error");
+                                    connection.release();
+                                } else {
+                                    //수행자 상태 변경
+                                    updateQuery = 'UPDATE helpers SET status = ? WHERE user_idx = ?'
+                                    var value2 = ["D", user_idx];
+                                    connection.query(updateQuery, value2, function (err4, rows4) {
+                                        if (err4) {
+                                            console.log("Connection Error4 : " + err4);
+                                            res.status(500).send("internal server error");
+                                            connection.release();
+                                        } else {
+											////디테일 정보, 수행자로 들어왔고 매칭이 되면 수행자의 정보를 팝업으로 넘겨주는거야.
+											console.log("user_id :"+user_id);
+											selectQuery = "select c.helpers_members_idx as h_id from current_tasks c, members m where c.helpers_members_idx = m.user_idx and m.user_id = ?";
+											connection.query(selectQuery, user_id, function (err2, rows5) {
+												if (err) {
+													console.log("Connection Error2 : " + err2);
+													res.status(500).send({ message: "Connection Error2 : " + err2 });
+													connection.release();
+												} else {
+													console.log(rows5);
+													console.log(rows5[0]);
+													console.log(rows5[0].h_id);
+													var u_id = rows5[0].h_id;
+													//수행자 이름 별점 번호 수행횟수(총횟수) 이미지
+													selectQuery = "SELECT m.user_name, (h.rating/h.rated_count) AS star, m.phone, h.rated_count, m.image_path FROM members m, helpers h WHERE m.user_idx = h.user_idx AND h.user_idx = ?"
+													connection.query(selectQuery, u_id, function (err3, rows3){
+														if (err3) {
+															console.log("Connection Error2 : " + err3);
+															res.status(500).send({ message: "Connection Error2 : " + err3 });
+															connection.release();
+														} else {
+														////
+																var matchingMessage=new gcm.Message({
+																	collapseKey: 'BurnIt',
+																	delayWhileIdle: true,
+																	timeToLive: 3,
+
+																	data:{
+																		title: 'BurnIt',
+																		message: '매칭되었습니다',
+																		user_name: rows3[0].user_name,
+																		star: rows3[0].star,
+																	    phone: rows3[0].phone,
+																		count: rows3[0].rated_count,
+																		image_path: rows3[0].image_path
+																	}
+																});
+																//토큰값의로 의뢰자의 아이디값을 넘겨주면, 일로 메세지가 간다.
+																var token='dwdcgLMv6Xw:APA91bGE_9_5BL7yi1I_QPIojjJXsakMOMdgoNpOWUP81S1Sy45YDCIg6W774fG4SUTOxTm0qaAt6dXz1GxkGIKEewvtbCYfyoUZ7cH8r82tR1g77rqFQYk0mU0myvQwfinFt20Ln1rs';
+																 
+																registrationIds.push(token);
+
+																sender.send(matchingMessage, registrationIds, 4, function(err, result){
+																	console.log("dahoon pop up"+result);
+																});
+
+																res.status(200).json({ message: "Success in matching" });
+																			connection.release();
+														////
+														}
+													});
+												}
+											});
+                   
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    }
+                });
+            }
+        }
+    });
+});
+
+
+
 
 //매칭중
 //의뢰자가 자기 아이디로 임무 매칭시간 받아서 체크

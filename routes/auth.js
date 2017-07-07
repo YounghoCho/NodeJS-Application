@@ -229,7 +229,8 @@ router.post('/login', function(req, res) {
                         res.status(500).send({message:"internal server error :"+error});
                         connection.release();
                     } else {
-                        if(rows){
+						console.log(rows[0]);
+                        if(rows[0]){
                           res.status(200).json({message : "Success in login"});
                           connection.release();
                         }else{
