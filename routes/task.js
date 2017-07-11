@@ -748,7 +748,6 @@ router.delete('/matching/cancel', function (req, res) {
         } else {
             let user_id = req.query.user_id; let role = req.query.role;
             let user_idx;
-            let deleteQuery;
             console.log("user_id : ", user_id); console.log("role : ", role);
 
             if (!(user_id&&role)) {
@@ -756,39 +755,89 @@ router.delete('/matching/cancel', function (req, res) {
                 connection.release();
             } else {
                 //user_idx 알아내기
+                let deleteQuery;
                 let selectQuery = 'SELECT user_idx FROM members WHERE user_id = ?';
+                let updateQuery;
+                let updateQuery2;
                 connection.query(selectQuery, user_id, function (err, rows) {
                     if (err) {
                         console.log("Connection Error1 : " + err);
-                        res.status(500).send({ message: "Connection Error1 : " + err });
+                        res.status(500).send({ message: "internal server error" });
                         connection.release();
                     } else {
                         if (JSON.stringify(rows)=="[]") {
-                            res.status(400).send({ message: '그런 사용자 없수다' });
+                            res.status(405).send({ message: 'no work' });
                             connection.release();
                         } else {
                             console.log(rows[0]);
                             user_idx = rows[0].user_idx;
                             //user_idx로 current_tasks에서 task 삭제
-                            if (role == "client")       deleteQuery = 'DELETE FROM current_tasks WHERE clients_members_idx = ?';
-                            else if (role == "helper")  deleteQuery = 'DELETE FROM current_tasks WHERE helpers_members_idx = ?';
-                            connection.query(deleteQuery, user_idx, function (err2, rows2) {
-                                if (err2) {
-                                    console.log("Connection Error2 : " + err2);
-                                    res.status(500).send({ message: "Connection Error2 : " + err2 });
+                            if (role == "client") {
+                                deleteQuery = 'DELETE FROM current_tasks WHERE clients_members_idx = ?';
+                                selectQuery = 'SELECT helpers_members_idx AS u_idx FROM current_tasks WHERE clients_members_idx = ?';
+                                updateQuery = 'UPDATE clients SET status = ? WHERE user_idx = ?'
+                                updateQuery2 = 'UPDATE helpers SET status = ? WHERE user_idx = ?'
+                            } else if (role == "helper") { 
+                                deleteQuery = 'DELETE FROM current_tasks WHERE helpers_members_idx = ?';
+                                selectQuery = 'SELECT clients_members_idx AS u_idx FROM current_tasks WHERE helpers_members_idx = ?';
+                                updateQuery = 'UPDATE helpers SET status = ? WHERE user_idx = ?'
+                                updateQuery2 = 'UPDATE clients SET status = ? WHERE user_idx = ?'
+                            }
+                            //상대방 idx 가져오기
+                            connection.query(selectQuery, user_idx, function (err3, rows3) {
+                                if (err3) {
+                                    console.log("Connection Error3 : " + err3);
+                                    res.status(500).send({ message: "internal server error" });
                                     connection.release();
                                 } else {
-                                    res.status(200).send({ message: "Success!" });
-                                    connection.release();
+                                    if(JSON.stringify(rows3)=="[]"){
+                                        console.log("Connection Error4 : " + err3);
+                                        res.status(400).send({ message: "wrong input" });
+                                        connection.release();
+                                    } else{
+                                        //나, 상대방 상태 갱신
+                                        let user_idx2 = rows3[0].u_idx;
+                                        console.log("user_idx2 : ", user_idx2);
+                                        let data=['A', user_idx];
+                                        connection.query(updateQuery, data, function (err4, rows4) {
+                                            if (err4) {
+                                                console.log("Connection Error4 : " + err4);
+                                                res.status(500).send({ message: "internal server error" });
+                                                connection.release();
+                                            } else {
+                                                let data2=['A', user_idx2];
+                                                connection.query(updateQuery2, data2, function (err5, rows5) {
+                                                    if (err5) {
+                                                        console.log("Connection Error5 : " + err5);
+                                                        res.status(500).send({ message: "internal server error" });
+                                                        connection.release();
+                                                    } else {
+                                                        //task 삭제
+                                                        connection.query(deleteQuery, user_idx, function (err2, rows2) {
+                                                            if (err2) {
+                                                                console.log("Connection Error2 : " + err2);
+                                                                res.status(500).send({ message: "internal server error" });
+                                                                connection.release();
+                                                            } else {
+                                                                res.status(200).send({ message: "Success" });
+                                                                connection.release();        
+                                                            }
+                                                        });
+                                                    } 
+                                                });
+                                            }
+                                        });                                
+                                    }
                                 }
                             });
                         }
-                    }
+                    }   
                 });
             }
         }
     });
 });
+
 router.get('/comments', function (req, res) {
     pool.getConnection(function (error, connection) {
         if (error) {
